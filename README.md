@@ -28,6 +28,7 @@ Whisper에서 Unity로 음성 인식 텍스트를 전달하는 프로젝트.
      - **"방패병 앞으로 가"**
      - **"전사 뒤로 가"**
      - **"궁수 왼쪽으로 가"**
+5. 오브젝트 이름이나 명령어를 수정하고 싶으면 units.json과 actions.json 파일을 먼저 수정한 뒤 CommandProcessor.cs 파일에 switch(actions) case문 쪽을 그에 맞게 수정해줌
 
 ---
 
