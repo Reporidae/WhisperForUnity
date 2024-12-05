@@ -1,3 +1,4 @@
+import socket
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 import sounddevice as sd
@@ -26,14 +27,49 @@ pipe = pipeline(
     device=device,
 )
 
+generate_kwargs = {
+    "language": "korean",             # 한국어 강제 설정
+    "max_new_tokens": 100,            # 최대 토큰 수
+    "num_beams": 3,                   # 빔 검색 수
+    "condition_on_prev_tokens": True,  # 이전 토큰 조건 무시
+    "compression_ratio_threshold": 2.4,  # 압축 비율 임계값
+    "temperature": 0.2,
+    "logprob_threshold": 1.0,        # 로그 확률 임계값
+    "no_speech_threshold": 100.0,       # 무음 임계값
+    "return_timestamps": True,        # 타임스탬프 반환
+}
+
+
 # VAD 설정
 vad = webrtcvad.Vad()
 vad.set_mode(3)  # 0~3 (3이 가장 민감)
 
 # 오디오 스트림 설정
 SAMPLE_RATE = 16000  # Whisper 모델에 적합한 샘플링 레이트
-FRAME_DURATION = 0.02  # 프레임 길이 (초), 10ms, 20ms, 30ms 중 하나
+FRAME_DURATION = 0.03  # 프레임 길이 (초), 10ms, 20ms, 30ms 중 하나
 FRAME_SIZE = int(SAMPLE_RATE * FRAME_DURATION)  # 프레임 크기
+
+# Unity와 소켓 통신 설정
+HOST = "127.0.0.1"  # Unity와 통신할 호스트 IP
+PORT = 5005         # Unity와 통신할 포트
+
+def send_command_to_unity(command):
+    """
+    Unity로 명령어를 전송하는 함수
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.connect((HOST, PORT))
+            s.sendall(command.encode('utf-8'))
+            print(f"Sent to Unity: {command}")
+        except ConnectionRefusedError:
+            print("Unity 서버에 연결할 수 없습니다. Unity에서 서버를 실행 중인지 확인하세요.")
+
+def normalize_text(text):
+    """
+    입력 텍스트를 정규화: 공백 제거 및 소문자 변환
+    """
+    return text.replace(" ", "").strip()
 
 def frame_generator(audio_stream):
     """
@@ -74,8 +110,24 @@ def main():
                 audio_input = {"array": audio_segment_resampled, "sampling_rate": SAMPLE_RATE}
 
                 # 텍스트 변환
-                result = pipe(audio_input)
+                result = pipe(inputs=audio_input , generate_kwargs=generate_kwargs)
+                #result = pipe(inputs=audio_input)
                 print("Transcription:", result["text"])
+
+                # 텍스트 정규화
+                normalized_text = normalize_text(result["text"])
+                print(f"Normalized Text: {normalized_text}")
+
+                # 명령어 분석 및 Unity로 전송
+                if "마법사앞으로가" in normalized_text:
+                    send_command_to_unity("MAGE|MOVE_FORWARD")
+
+                if "전사뒤로가" in normalized_text:
+                    send_command_to_unity("WARRIOR|MOVE_BACKWARD")
+
+                if "궁수왼쪽으로가" in normalized_text:
+                    send_command_to_unity("ARCHER|MOVE_LEFT")
+
     except KeyboardInterrupt:
         print("Program stopped.")
 
