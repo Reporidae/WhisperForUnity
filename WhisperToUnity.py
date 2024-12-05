@@ -53,6 +53,10 @@ with open(os.path.join(current_dir, "units.json"), "r", encoding="utf-8") as f:
 with open(os.path.join(current_dir, "actions.json"), "r", encoding="utf-8") as f:
     actions = json.load(f)
 
+# 정규 표현식 패턴 생성
+pattern = r"(" + "|".join(units.keys()) + r")(" + "|".join(actions.keys()) + r")"
+regex = re.compile(pattern)
+
 # VAD 설정
 vad = webrtcvad.Vad()
 vad.set_mode(3)
@@ -121,12 +125,20 @@ def main():
                 normalized_text = normalize_text(result["text"])
                 print(f"Normalized Text: {normalized_text}")
 
-                # 명령어 분석 및 전송
-                for unit_kor, unit_eng in units.items():
-                    for action_kor, action_eng in actions.items():
-                        if f"{unit_kor}{action_kor}" in normalized_text:
-                            send_command_to_unity(f"{unit_eng}|{action_eng}")
-                            print("{unit_eng}|{action_eng}")
+                # 정규 표현식으로 명령어 탐색 후 유니티로 전송
+                match = regex.search(normalized_text)
+                if match:
+                    unit_kor = match.group(1)  # 첫 번째 그룹: 유닛
+                    action_kor = match.group(2)  # 두 번째 그룹: 동작
+
+                    unit_eng = units[unit_kor]
+                    action_eng = actions[action_kor]
+                    command = f"{unit_eng}|{action_eng}"
+                    send_command_to_unity(command)
+                    print(f"Processed Command: {command}")
+                else:
+                    print("No valid command found in the transcription.")
+
 
     except KeyboardInterrupt:
         print("Program stopped.")
