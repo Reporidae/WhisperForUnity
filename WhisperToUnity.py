@@ -121,13 +121,12 @@ def main():
                 normalized_text = normalize_text(result["text"])
                 print(f"Normalized Text: {normalized_text}")
 
-                # 정규 표현식으로 명령어 탐색
+                # 명령어 분석 및 전송
                 for unit_kor, unit_eng in units.items():
                     for action_kor, action_eng in actions.items():
-                        if re.search(f"{unit_kor}.*{action_kor}", normalized_text):
-                            command = f"{unit_eng}|{action_eng}"
-                            send_command_to_unity(command)
-                            print(f"Processed Command: {command}")
+                        if f"{unit_kor}{action_kor}" in normalized_text:
+                            send_command_to_unity(f"{unit_eng}|{action_eng}")
+                            print("{unit_eng}|{action_eng}")
 
     except KeyboardInterrupt:
         print("Program stopped.")
