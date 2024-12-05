@@ -80,6 +80,7 @@ def frame_generator(audio_stream):
     마이크로부터 고정된 길이의 오디오 프레임 생성.
     """
     while True:
+        # 마이크에서 고정된 길이의 데이터를 읽음
         data, _ = audio_stream.read(FRAME_SIZE)
         audio = data[:, 0]  # 1채널만 사용 (모노)
         audio_bytes = (audio * 32768).astype(np.int16).tobytes()  # 16-bit PCM 변환
@@ -91,35 +92,64 @@ def vad_collector(audio_stream):
     """
     audio_buffer = b""
     for frame in frame_generator(audio_stream):
+        # VAD로 음성 감지
         if vad.is_speech(frame, SAMPLE_RATE):
             audio_buffer += frame
         elif audio_buffer:
+            # 음성 감지가 끝나면 버퍼 반환
             yield np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
             audio_buffer = b""  # 버퍼 초기화
 
 def main():
     print("Listening for audio... Press Ctrl+C to stop.")
     try:
+        # 마이크에서 오디오 스트림 열기
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32') as stream:
             for audio_segment in vad_collector(stream):
                 print("Processing detected speech...")
+                # Whisper 입력 크기에 맞게 재샘플링
                 audio_segment_resampled = resample(audio_segment, len(audio_segment) * SAMPLE_RATE // len(audio_segment))
+                # Whisper 입력 형식으로 변환
                 audio_input = {"array": audio_segment_resampled, "sampling_rate": SAMPLE_RATE}
 
-                result = pipe(inputs=audio_input, generate_kwargs=generate_kwargs)
+
+                # 텍스트 변환
+                result = pipe(inputs=audio_input , generate_kwargs=generate_kwargs)
+                #result = pipe(inputs=audio_input)
                 print("Transcription:", result["text"])
 
+                # 텍스트 정규화
                 normalized_text = normalize_text(result["text"])
                 print(f"Normalized Text: {normalized_text}")
 
-                if "마법사앞으로가" in normalized_text:
-                    send_command_to_unity("MAGE|MOVE_FORWARD")
+                # 유닛 및 동작 매핑
+                units = {
+                    "전사": "SWORDMAN",
+                    "창병": "SPEARMAN",
+                    "장병": "SPEARMAN",
+                    "궁수": "ARCHER",
+                    "공수": "ARCHER",
+                    "공소": "ARCHER",# 오탈자도 알맞게 매핑시킴
+                    "궁서": "ARCHER",
+                    "방패병": "SHIELDMAN",
+                    "검사": "SWORDMAN"
+                }
 
-                if "전사뒤로가" in normalized_text:
-                    send_command_to_unity("WARRIOR|MOVE_BACKWARD")
+                actions = {
+                    "앞": "MOVE_FORWARD",
+                    "전진" : "MOVE_FORWARD",
+                    "뒤": "MOVE_BACKWARD",
+                    "왼": "MOVE_LEFT",
+                    "오른": "MOVE_RIGHT",
+                    "후퇴": "RETREAT"
+                }
 
-                if "궁수왼쪽으로가" in normalized_text:
-                    send_command_to_unity("ARCHER|MOVE_LEFT")
+                # 명령어 분석 및 전송
+                for unit_kor, unit_eng in units.items():
+                    for action_kor, action_eng in actions.items():
+                        if f"{unit_kor}{action_kor}" in normalized_text:
+                            send_command_to_unity(f"{unit_eng}|{action_eng}")
+                            print("{unit_eng}|{action_eng}")
 
     except KeyboardInterrupt:
         print("Program stopped.")
