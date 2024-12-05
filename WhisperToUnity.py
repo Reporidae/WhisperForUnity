@@ -1,3 +1,4 @@
+import os
 import socket
 import torch
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
@@ -10,9 +11,13 @@ from scipy.signal import resample
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-model_id = "openai/whisper-large-v3-turbo"
+# 현재 스크립트의 디렉터리 경로 가져오기
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# 파인 튜닝된 모델의 상대 경로 설정
+model_id = os.path.join(current_dir, "fine_tuned_whisper")
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
-    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True, use_safetensors=True
+    model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True
 )
 model.to(device)
 
@@ -38,7 +43,6 @@ generate_kwargs = {
     "no_speech_threshold": 100.0,       # 무음 임계값
     "return_timestamps": True,        # 타임스탬프 반환
 }
-
 
 # VAD 설정
 vad = webrtcvad.Vad()
@@ -76,7 +80,6 @@ def frame_generator(audio_stream):
     마이크로부터 고정된 길이의 오디오 프레임 생성.
     """
     while True:
-        # 마이크에서 고정된 길이의 데이터를 읽음
         data, _ = audio_stream.read(FRAME_SIZE)
         audio = data[:, 0]  # 1채널만 사용 (모노)
         audio_bytes = (audio * 32768).astype(np.int16).tobytes()  # 16-bit PCM 변환
@@ -88,37 +91,27 @@ def vad_collector(audio_stream):
     """
     audio_buffer = b""
     for frame in frame_generator(audio_stream):
-        # VAD로 음성 감지
         if vad.is_speech(frame, SAMPLE_RATE):
             audio_buffer += frame
         elif audio_buffer:
-            # 음성 감지가 끝나면 버퍼 반환
             yield np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32) / 32768.0
             audio_buffer = b""  # 버퍼 초기화
 
 def main():
     print("Listening for audio... Press Ctrl+C to stop.")
     try:
-        # 마이크에서 오디오 스트림 열기
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32') as stream:
             for audio_segment in vad_collector(stream):
                 print("Processing detected speech...")
-                # Whisper 입력 크기에 맞게 재샘플링
                 audio_segment_resampled = resample(audio_segment, len(audio_segment) * SAMPLE_RATE // len(audio_segment))
-
-                # Whisper 입력 형식으로 변환
                 audio_input = {"array": audio_segment_resampled, "sampling_rate": SAMPLE_RATE}
 
-                # 텍스트 변환
-                result = pipe(inputs=audio_input , generate_kwargs=generate_kwargs)
-                #result = pipe(inputs=audio_input)
+                result = pipe(inputs=audio_input, generate_kwargs=generate_kwargs)
                 print("Transcription:", result["text"])
 
-                # 텍스트 정규화
                 normalized_text = normalize_text(result["text"])
                 print(f"Normalized Text: {normalized_text}")
 
-                # 명령어 분석 및 Unity로 전송
                 if "마법사앞으로가" in normalized_text:
                     send_command_to_unity("MAGE|MOVE_FORWARD")
 
