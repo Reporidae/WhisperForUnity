@@ -16,9 +16,9 @@ Whisper에서 Unity로 음성 인식 텍스트를 전달하는 프로젝트.
      - `ObjectController`
    - 빈 게임 오브젝트를 생성하고, 컴포넌트에 `ObjectController` 추가.
    - 3D 오브젝트를 생성하고 다음과 같이 이름 지정:
-     - `MAGE`
-     - `ARCHER`
-     - `WARRIOR`
+     - `SHIELDMAN`
+     - `SWORDMAN`
+     - `ARHCER`
    - 각 오브젝트에 `MovableObject` 스크립트를 추가.
 3. **실행**:
    - Unity 게임 실행.
