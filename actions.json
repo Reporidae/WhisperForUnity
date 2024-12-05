@@ -1,0 +1,8 @@
+{
+    "앞": "MOVE_FORWARD",
+    "뒤": "MOVE_BACKWARD",
+    "왼": "MOVE_LEFT",
+    "오른": "MOVE_RIGHT",
+    "후퇴": "RETREAT",
+    "전진": "MOVE_FORWARD"
+}
