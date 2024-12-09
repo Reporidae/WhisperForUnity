@@ -5,10 +5,10 @@ Whisper에서 Unity로 음성 인식 텍스트를 전달하는 프로젝트.
 
 ## 사용법
 
-### 1. WhisperToUnity 사용법
+### 1. 프로젝트 사용법
 
 1. **다음 파일들이 같은 경로에 있어야 함**
-   - 위스퍼 모델 폴더 (폴더 이름에 따라 model_id 부분 폴더 이름과 똑같이 수정 필요)
+   - 위스퍼 모델 폴더 (폴더 이름에 따라 model_id WhisperToUnity 부분은 폴더 이름과 똑같이 수정 필요)
    - WhisperToUnity.py
    - actions.json
    - units.json
