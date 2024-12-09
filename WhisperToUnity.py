@@ -1,4 +1,5 @@
 import os
+import sys
 import re
 import socket
 import torch
@@ -10,6 +11,7 @@ import webrtcvad
 from scipy.signal import resample
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 from transformers import logging
+import time
 
 # 특정 경고 메시지 무시
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -18,22 +20,40 @@ warnings.filterwarnings("ignore", category=UserWarning)
 # Transformers 로그 수준 설정
 logging.set_verbosity_error()
 
+# PyInstaller 임시 디렉터리 경로 처리
+if getattr(sys, 'frozen', False):  # PyInstaller로 빌드된 경우
+    current_dir = os.path.dirname(sys.executable)  # 실행 파일의 디렉터리
+else:
+    current_dir = os.path.dirname(os.path.abspath(__file__))  # 스크립트 경로
+
+# 프로그래스 바 함수
+def show_individual_progress_bar(message, duration=2):
+    """각 작업에 대해 0%부터 100%까지 프로그래스 바를 표시"""
+    total_steps = 100
+    for step in range(1, total_steps + 1):
+        percentage = step
+        bar = f"[{'#' * (percentage // 5)}{'.' * (20 - (percentage // 5))}]"
+        sys.stdout.write(f"\r{message}: {bar} {percentage}%")
+        sys.stdout.flush()
+        time.sleep(duration / total_steps)  # 총 작업 시간을 조절
+    print("")  # 작업 완료 후 줄바꿈
+
 # 모델 초기화
+show_individual_progress_bar("Initializing device")
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
 
-# 현재 스크립트의 디렉터리 경로 가져오기
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# 파인 튜닝된 모델 로드
+show_individual_progress_bar("Loading model")
 model_id = os.path.join(current_dir, "fine_tuned_whisper")
 model = AutoModelForSpeechSeq2Seq.from_pretrained(
     model_id, torch_dtype=torch_dtype, low_cpu_mem_usage=True
 )
 model.to(device)
 
+show_individual_progress_bar("Loading processor")
 processor = AutoProcessor.from_pretrained(model_id)
 
+show_individual_progress_bar("Setting up pipeline")
 pipe = pipeline(
     "automatic-speech-recognition",
     model=model,
@@ -43,6 +63,7 @@ pipe = pipeline(
     device=device,
 )
 
+show_individual_progress_bar("Finalizing setup")
 generate_kwargs = {
     "language": "korean",
     "max_new_tokens": 100,
@@ -55,11 +76,19 @@ generate_kwargs = {
     "return_timestamps": True,
 }
 
+print("Initialization complete!")
+
 # JSON 매핑 파일 로드
-with open(os.path.join(current_dir, "units.json"), "r", encoding="utf-8") as f:
+def resource_path(relative_path):
+    """PyInstaller로 빌드된 실행 파일에서 데이터를 찾는 경로를 반환"""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.dirname(__file__), relative_path)
+
+with open(resource_path("units.json"), "r", encoding="utf-8") as f:
     units = json.load(f)
 
-with open(os.path.join(current_dir, "actions.json"), "r", encoding="utf-8") as f:
+with open(resource_path("actions.json"), "r", encoding="utf-8") as f:
     actions = json.load(f)
 
 # VAD 설정
@@ -130,46 +159,29 @@ def main():
     print("Listening for audio... Press Ctrl+C to stop.")
     try:
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype='float32') as stream:
-            # 무시해야 할 단어 집합
             unwanted_phrases = ["감사합니다", "네", "알겠습니다", "뒤로", "후퇴해", "아"]
-            # 결합된 정규식: 단어 반복과 문자 반복 모두 처리
             combined_pattern = re.compile(r"^((뒤로|후퇴해)(\s*|$)){2,}|(.)\4{3,}")
             for audio_segment in vad_collector(stream):
-                #print("Processing detected speech...")
-                # 오디오 입력 처리
                 audio_segment_resampled = resample(audio_segment, len(audio_segment) * SAMPLE_RATE // len(audio_segment))
                 audio_input = {"array": audio_segment_resampled, "sampling_rate": SAMPLE_RATE}
 
-                # 위스퍼로 음성 인식
                 result = pipe(inputs=audio_input, generate_kwargs=generate_kwargs)
                 transcription = result["text"]
-                #print("Transcription:", result["text"])
 
-                # 텍스트 정규화
                 normalized_text = normalize_text(result["text"])
-                #print(f"Normalized Text: {normalized_text}")
-
-                # 유효한 명령어 탐색
                 unit_eng, action_eng = find_command(normalized_text)
                 
                 if (not unit_eng or not action_eng) and (
                 normalized_text in unwanted_phrases or combined_pattern.match(normalized_text)):
-                    print(f"Filtered unwanted input: '{transcription}'. Ignoring this input.\n")
                     continue
-                
-                #print("Processing detected speech...")
-                # 명령어 처리
+
                 if unit_eng and action_eng:
                     command = f"{unit_eng}|{action_eng}"
                     print("Transcription:", result["text"])
                     send_command_to_unity(command)
-                    #print(f"Normalized Text: {normalized_text}")
-                    #print(f"Processed Command: {command}")
-                    #print(f"\n")
                 else:
                     print("Transcription:", result["text"])
                     print("No valid command found in the transcription.\n")
-                    #print(f"\n")
 
     except KeyboardInterrupt:
         print("Program stopped.")
