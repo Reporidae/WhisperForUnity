@@ -62,7 +62,9 @@ Whisper에서 Unity로 음성 인식 텍스트를 전달하는 프로젝트.
 1. **파이썬 파일 빌드**
    - pyinstaller를 이용해서 파이썬 코드를 .exe 실행 파일로 빌드한다.
      - 안 깔려 있다면 터미널에 pip install pyinstaller를 입력해서 설치한다.
-     - 사용 예시: pyinstaller --onefile --add-data "actions.json;." --add-data "units.json;." WhisperToUnity.py
+     - 사용 예시:
+       ```bash
+       pyinstaller --onefile --add-data "actions.json;." --add-data "units.json;." WhisperToUnity.py
 2. **파일 경로 매칭**
    - 빌드한 파일을 유니티 Assets - StreamingAssets - Python 경로에 넣는다. (원래 처음엔 없으니 만들어야 함 경로를 다르게 바꾸고 싶으면 PythonLauncher 코드 수정)
    - 위스퍼 모델 폴더도 같은 경로에 넣는다.
